@@ -4,6 +4,7 @@ import { Client } from "@stomp/stompjs";
 import type { IMessage, StompSubscription } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 
+import "./tester-base.css";
 import "./CombatTester.css";
 
 type Enemy = {
@@ -340,7 +341,7 @@ export default function CombatTester() {
   }, [combatId]);
 
   return (
-    <main className="app">
+    <section className="tester combat-tester">
       <h1>Combat-test</h1>
 
       <section className="panel">
@@ -390,7 +391,10 @@ export default function CombatTester() {
         <p>
           combatId: <code>{combatId || "-"}</code>
         </p>
-        <p>WebSocket: {wsConnected ? "ansluten" : "ej ansluten"}</p>
+        <p className="ws-status">
+          WebSocket:{" "}
+          <strong>{wsConnected ? "ansluten" : "ej ansluten"}</strong>
+        </p>
       </section>
 
       <section className="panel">
@@ -447,6 +451,6 @@ export default function CombatTester() {
         <h2>Logg</h2>
         <textarea readOnly className="log" value={log.join("\n")} />
       </section>
-    </main>
+    </section>
   );
 }
