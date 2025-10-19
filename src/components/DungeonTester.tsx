@@ -37,7 +37,7 @@ type DungeonDetail = {
   rooms?: DungeonRoomNode[];
 };
 
-const defaultBaseUrl = "http://localhost:8080/api/v1/dungeon";
+const defaultBaseUrl = "https://rpg-backend-lzzz.onrender.com/api/v1/dungeon";
 
 const ts = () =>
   new Date().toLocaleTimeString("sv-SE", {
