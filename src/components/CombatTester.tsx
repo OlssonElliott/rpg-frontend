@@ -30,7 +30,7 @@ type Combat = {
   combatOver: boolean;
 };
 
-const defaultBaseUrl = "http://localhost:8080/api/v1/combat";
+const defaultBaseUrl = "https://rpg-backend-lzzz.onrender.com/api/v1/combat";
 
 const ts = () =>
   new Date().toLocaleTimeString("sv-SE", {
