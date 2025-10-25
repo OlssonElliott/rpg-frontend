@@ -12,20 +12,28 @@ function App(): JSX.Element {
   return (
     <PlayersProvider>
       <div className="app-shell">
-        {/* <header className="app-header">
-        <h1>RPG Testverktyg</h1>
-        <p>
-          Snabbpaneler for att prova bade dungeon-sessioner och combat-motorn.
-        </p>
-      </header>
+        <div className="app-primary-layout">
+          <div className="app-primary-column">
+            <CreateCharacter />
+            <SelectCharacter />
+          </div>
+          <div className="app-secondary-column">
+            <DungeonGame />
+          </div>
+        </div>
+        {/*
+        <header className="app-header">
+          <h1>RPG Testverktyg</h1>
+          <p>
+            Snabbpaneler for att prova bade dungeon-sessioner och combat-motorn.
+          </p>
+        </header>
 
-      <div className="tester-grid">
-        <DungeonTester />
-        <CombatTester />
-      </div> */}
-        <CreateCharacter />
-        <SelectCharacter />
-        <DungeonGame />
+        <div className="tester-grid">
+          <DungeonTester />
+          <CombatTester />
+        </div>
+        */}
       </div>
     </PlayersProvider>
   );
