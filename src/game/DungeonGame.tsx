@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import "./DungeonGame.css";
 import { dungeonDirections, type DungeonDirection } from "./dungeonUtils";
 import { useDungeonGame } from "./methods/useDungeonGame";
 import type { DungeonLogEntry } from "./methods/useDungeonLog";
@@ -26,7 +27,7 @@ function DungeonRoomSection({
       <h3>Nuvarande rum</h3>
       <p>{currentRoomLabel}</p>
       <p>
-        Tillgängliga riktningar:{" "}
+        Tillg�ngliga riktningar:{" "}
         {availableDirections.length > 0
           ? availableDirections.join(", ")
           : "Inga"}
@@ -104,62 +105,75 @@ export default function DungeonGame(): JSX.Element {
     loadingState.session || !selectedPlayerName || !selectedDungeonId;
 
   return (
-    <section className="panel">
-      <h2>Dungeon</h2>
+    <section className="panel dungeon-game-panel">
+      <div className="dungeon-game-header">
+        <h2>Dungeon</h2>
 
-      {!selectedPlayerName ? (
-        <p>Välj en karaktär för att spela.</p>
-      ) : (
-        <p>
-          Aktivt äventyr: {selectedPlayerName} ({normalizedPlayerId || "ok id"})
+        {!selectedPlayerName ? (
+          <p>V�lj en karakt�r f�r att spela.</p>
+        ) : (
+          <p>
+            Aktivt �ventyr: {selectedPlayerName} (
+            {normalizedPlayerId || "ok id"})
+          </p>
+        )}
+
+        {loadingState.list ? (
+          <p>Laddar dungeon...</p>
+        ) : activeDungeon ? (
+          <p>
+            Dungeon tilldelad:{" "}
+            {activeDungeon.name ?? activeDungeon.id ?? "ok dungeon"}
+          </p>
+        ) : (
+          <p>Ingen dungeon tillg�nglig �nnu.</p>
+        )}
+
+        <div className="actions dungeon-game-actions">
+          <button
+            type="button"
+            onClick={() => void startOrResume()}
+            disabled={startDisabled}
+          >
+            Starta / �teruppta
+          </button>
+        </div>
+
+        <p className="dungeon-game-status">
+          Websocket: {wsConnected ? "ansluten" : "inte ansluten"}
         </p>
-      )}
-
-      {loadingState.list ? (
-        <p>Laddar dungeon...</p>
-      ) : activeDungeon ? (
-        <p>
-          Dungeon tilldelad:{" "}
-          {activeDungeon.name ?? activeDungeon.id ?? "ok dungeon"}
-        </p>
-      ) : (
-        <p>Ingen dungeon tillgänglig ännu.</p>
-      )}
-
-      <div className="actions">
-        <button
-          type="button"
-          onClick={() => void startOrResume()}
-          disabled={startDisabled}
-        >
-          Starta / återuppta
-        </button>
+        {session?.currentCombatId ? (
+          <p className="hint">
+            Combat p�g�r (id: {session.currentCombatId}). V�nta
+            tills striden avslutas i combat-systemet innan du forts�tter.
+          </p>
+        ) : null}
       </div>
 
-      <p>Websocket: {wsConnected ? "ansluten" : "inte ansluten"}</p>
-      {session?.currentCombatId ? (
-        <p className="hint">
-          Combat pågår (id: {session.currentCombatId}). Vänta
-          tills striden avslutas i combat-systemet innan du fortsätter.
-        </p>
-      ) : null}
+      <div className="dungeon-game-body">
+        <div className="dungeon-game-main">
+          <DungeonRoomSection
+            currentRoomLabel={currentRoomLabel}
+            availableDirections={availableDirections}
+            combatActive={combatActive}
+            loading={loading}
+            wsConnected={wsConnected}
+            onMove={move}
+          />
 
-      <DungeonRoomSection
-        currentRoomLabel={currentRoomLabel}
-        availableDirections={availableDirections}
-        combatActive={combatActive}
-        loading={loading}
-        wsConnected={wsConnected}
-        onMove={move}
-      />
+          <DungeonLogSection entries={log} />
+        </div>
 
-      <DungeonLogSection entries={log} />
-
-      {mapLoading ? <p>Laddar karta...</p> : null}
-      <DungeonMapView
-        detail={dungeonDetail}
-        currentRoomId={session?.currentRoomId}
-      />
+        <aside className="dungeon-game-map">
+          {mapLoading ? (
+            <p className="dungeon-map-loading">Laddar karta...</p>
+          ) : null}
+          <DungeonMapView
+            detail={dungeonDetail}
+            currentRoomId={session?.currentRoomId}
+          />
+        </aside>
+      </div>
     </section>
   );
 }
