@@ -4,6 +4,8 @@ export type DungeonLoadingState = {
   list: boolean;
   session: boolean;
   sync: boolean;
+  room: boolean;
+  combat: boolean;
 };
 
 type LoadingKey = keyof DungeonLoadingState;
@@ -19,6 +21,8 @@ export function useDungeonLoading(): UseDungeonLoadingResult {
     list: false,
     session: false,
     sync: false,
+    room: false,
+    combat: false,
   });
 
   const withLoading = useCallback(
@@ -33,8 +37,7 @@ export function useDungeonLoading(): UseDungeonLoadingResult {
     []
   );
 
-  const loading =
-    loadingState.list || loadingState.session || loadingState.sync;
+  const loading = Object.values(loadingState).some(Boolean);
 
   return {
     loadingState,

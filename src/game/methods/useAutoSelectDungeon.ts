@@ -6,6 +6,7 @@ type UseAutoSelectDungeonArgs = {
   selectedDungeonId: string;
   sessionDungeonId?: string | null;
   setSelectedDungeonId: (value: string) => void;
+  autoSelectEnabled?: boolean;
 };
 
 export function useAutoSelectDungeon({
@@ -13,6 +14,7 @@ export function useAutoSelectDungeon({
   selectedDungeonId,
   sessionDungeonId,
   setSelectedDungeonId,
+  autoSelectEnabled = true,
 }: UseAutoSelectDungeonArgs): void {
   useEffect(() => {
     const trimmedSelection = selectedDungeonId.trim();
@@ -20,6 +22,10 @@ export function useAutoSelectDungeon({
       if (trimmedSelection !== selectedDungeonId) {
         setSelectedDungeonId(trimmedSelection);
       }
+      return;
+    }
+
+    if (!autoSelectEnabled) {
       return;
     }
 
@@ -37,5 +43,11 @@ export function useAutoSelectDungeon({
     if (fallbackId) {
       setSelectedDungeonId(fallbackId);
     }
-  }, [dungeons, selectedDungeonId, sessionDungeonId, setSelectedDungeonId]);
+  }, [
+    autoSelectEnabled,
+    dungeons,
+    selectedDungeonId,
+    sessionDungeonId,
+    setSelectedDungeonId,
+  ]);
 }

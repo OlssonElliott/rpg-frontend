@@ -81,11 +81,11 @@ export function DungeonMapView({
   };
 
   roomsWithCoordinates.forEach((room) => {
-    const normalizedDoors = (room.doorDirections ?? []).filter(
-      isKnownDirection
-    );
+    const normalizedDoors = (
+      room.doorDirections ?? []
+    ).filter(isKnownDirection) as DungeonDirection[];
 
-    normalizedDoors.forEach((direction) => {
+    normalizedDoors.forEach((direction: DungeonDirection) => {
       const [dx, dy] = directionOffsets[direction];
       const neighborKey = `${room.x + dx}|${room.y + dy}`;
       const neighbor = coordinateLookup.get(neighborKey);
@@ -125,9 +125,12 @@ export function DungeonMapView({
           {rooms.map((room, index) => {
             const isCurrent = room.roomId === currentRoomId;
             const tags = collectRoomTags(room, isCurrent);
-            const directionLabels = room.doorDirections?.map(
-              (direction) => directionLabelMap.get(direction) ?? direction
-            );
+            const directionLabels = room.doorDirections?.map((direction) => {
+              const typedDirection = direction as DungeonDirection;
+              return (
+                directionLabelMap.get(typedDirection) ?? direction
+              );
+            });
             return (
               <li key={room.roomId}>
                 <strong>Rum {index + 1}</strong>
@@ -165,7 +168,7 @@ export function DungeonMapView({
 
   const computedGapScaleY =
     rows > 0 && columns > 0 ? Math.min(Math.max(columns / rows, 0.55), 1.25) : 1;
-  const gridStyle: CSSProperties = {
+  const gridStyle: CSSProperties & Record<string, string> = {
     gridTemplateColumns: `repeat(${columns}, minmax(0, var(--room-size)))`,
     gridTemplateRows: `repeat(${rows}, minmax(0, var(--room-size)))`,
     "--room-gap-scale-x": "1",
@@ -185,11 +188,14 @@ export function DungeonMapView({
             const gridColumn = normalizedColumn.toString();
             const gridRow = normalizedRow.toString();
             const tags = collectRoomTags(room, isCurrent);
-            const directionLabels = room.doorDirections?.map(
-              (direction) => directionLabelMap.get(direction) ?? direction
-            );
+            const directionLabels = room.doorDirections?.map((direction) => {
+              const typedDirection = direction as DungeonDirection;
+              return (
+                directionLabelMap.get(typedDirection) ?? direction
+              );
+            });
             const roomKey = `${room.x}|${room.y}`;
-            const connectorDirections = Array.from(
+            const connectorDirections = Array.from<DungeonDirection>(
               connectorAssignments.get(roomKey) ?? []
             );
             const positionStyle: CSSProperties = {

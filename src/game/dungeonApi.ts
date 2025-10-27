@@ -2,7 +2,9 @@ import type {
   DungeonDetail,
   DungeonSummary,
   GameSession,
+  RoomTemplate,
 } from "../types/dungeon";
+import type { Combat } from "../types/combat";
 import { buildDungeonUrl, dungeonBaseUrl } from "./dungeonUtils";
 
 async function handleJsonResponse<T>(response: Response): Promise<T> {
@@ -18,19 +20,59 @@ type DungeonRequestOptions = {
   init?: RequestInit;
 };
 
-async function requestDungeon<T>(
+const roomBaseUrl = new URL(
+  "./rooms",
+  import.meta.env.VITE_API_URL
+).toString();
+
+const combatBaseUrl = new URL(
+  "./combat",
+  import.meta.env.VITE_API_URL
+).toString();
+
+async function requestApi<T>(
+  baseUrl: string,
   path: string,
   { params, init }: DungeonRequestOptions = {}
 ): Promise<T> {
-  const url = buildDungeonUrl(dungeonBaseUrl, path, params);
+  const url = buildDungeonUrl(baseUrl, path, params);
   const response = await fetch(url.toString(), init);
   return handleJsonResponse<T>(response);
 }
 
-export async function getDungeonList(): Promise<DungeonSummary[]> {
-  const list =
-    await requestDungeon<DungeonSummary[] | null>("/getAll");
+async function requestDungeon<T>(
+  path: string,
+  options?: DungeonRequestOptions
+): Promise<T> {
+  return await requestApi<T>(dungeonBaseUrl, path, options);
+}
+
+export async function getDungeonList(
+  playerId?: string
+): Promise<DungeonSummary[]> {
+  const params: Record<string, string> = {};
+  const trimmedPlayerId = playerId?.trim();
+  if (trimmedPlayerId) {
+    params.playerId = trimmedPlayerId;
+  }
+  const list = await requestDungeon<DungeonSummary[] | null>("/getAll", {
+    params: Object.keys(params).length > 0 ? params : undefined,
+  });
   return list ?? [];
+}
+
+export async function createDungeon(
+  playerId: string
+): Promise<DungeonSummary | null> {
+  const trimmed = playerId.trim();
+  if (!trimmed) {
+    throw new Error("Player id is required to create a dungeon.");
+  }
+
+  return await requestDungeon<DungeonSummary | null>("/create", {
+    params: { playerId: trimmed },
+    init: { method: "POST" },
+  });
 }
 
 export async function getDungeonDetail(
@@ -57,4 +99,24 @@ export async function postDungeonSession(
     params: { playerId, dungeonId },
     init: { method: "POST" },
   });
+}
+
+export async function getRoomTemplate(
+  roomRefId: string
+): Promise<RoomTemplate | null> {
+  if (!roomRefId) {
+    return null;
+  }
+  return await requestApi<RoomTemplate | null>(roomBaseUrl, "/getById", {
+    params: { id: roomRefId },
+  });
+}
+
+export async function getCombatState(
+  combatId: string
+): Promise<Combat | null> {
+  if (!combatId) {
+    return null;
+  }
+  return await requestApi<Combat | null>(combatBaseUrl, `/${combatId}`);
 }

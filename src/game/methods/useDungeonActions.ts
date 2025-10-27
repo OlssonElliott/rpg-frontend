@@ -5,6 +5,7 @@ import type {
   GameSession,
 } from "../../types/dungeon";
 import {
+  createDungeon,
   getDungeonDetail,
   getDungeonList,
   getDungeonSession,
@@ -24,6 +25,7 @@ type UseDungeonActionsArgs = {
   ) => Promise<T>;
   setDungeons: React.Dispatch<React.SetStateAction<DungeonSummary[]>>;
   setDungeonDetail: React.Dispatch<React.SetStateAction<DungeonDetail | null>>;
+  setSelectedDungeonId: (value: string) => void;
   requestSync: () => boolean;
   sendMove: (direction: DungeonDirection) => boolean;
 };
@@ -46,6 +48,7 @@ export function useDungeonActions({
   withLoading,
   setDungeons,
   setDungeonDetail,
+  setSelectedDungeonId,
   requestSync,
   sendMove,
 }: UseDungeonActionsArgs): UseDungeonActionsResult {
@@ -55,9 +58,38 @@ export function useDungeonActions({
   const reloadDungeons = useCallback(async () => {
     try {
       await withLoading("list", async () => {
-        const list = await getDungeonList();
+        let list = await getDungeonList(normalizedPlayerId);
+        if (list.length === 0) {
+          if (!normalizedPlayerId) {
+            appendLog(
+              "Inga dungeons hittades och ingen spelare vald - v\u00E4lj en karakt\u00E4r f\u00F6r att skapa en automatisk dungeon."
+            );
+          } else {
+            appendLog(
+              "Inga dungeons hittades - f\u00F6rs\u00F6ker skapa en ny automatiskt."
+            );
+            try {
+              const created = await createDungeon(normalizedPlayerId);
+              if (created?.id) {
+                const label = created.name ?? created.id;
+                appendLog(`Dungeon ${label} skapad automatiskt.`);
+                list = await getDungeonList(normalizedPlayerId);
+              } else {
+                appendLog(
+                  "Automatisk dungeon-skapning returnerade inget resultat."
+                );
+              }
+            } catch (error: unknown) {
+              appendLog(
+                `Fel vid automatisk dungeon-skapning: ${
+                  error instanceof Error ? error.message : String(error)
+                }`
+              );
+            }
+          }
+        }
         setDungeons(list);
-        appendLog(`Dungeonlista hämtad (${list.length} st).`);
+        appendLog(`Dungeonlista h\u00E4mtad (${list.length} st).`);
       });
     } catch (error: unknown) {
       appendLog(
@@ -66,7 +98,7 @@ export function useDungeonActions({
         }`
       );
     }
-  }, [appendLog, setDungeons, withLoading]);
+  }, [appendLog, normalizedPlayerId, setDungeons, withLoading]);
 
   const loadDetail = useCallback(
     async (id: string, showSpinner = false) => {
@@ -151,17 +183,43 @@ export function useDungeonActions({
   ]);
 
   const startOrResume = useCallback(async () => {
-    if (!normalizedPlayerId || !selectedDungeonId.trim()) {
-      appendLog("Välj karaktär och dungeon först.");
+    if (!normalizedPlayerId) {
+      appendLog("Välj karaktär först.");
       return;
+    }
+
+    let dungeonId = selectedDungeonId.trim();
+
+    if (!dungeonId) {
+      appendLog("Skapar en ny dungeon för den här karaktären...");
+      try {
+        const created = await createDungeon(normalizedPlayerId);
+        if (!created?.id) {
+          appendLog("Kunde inte skapa en ny dungeon automatiskt.");
+          return;
+        }
+        const trimmedId = created.id.trim();
+        setDungeons((previous) => {
+          const filtered = previous.filter(
+            (candidate) => candidate.id?.trim() !== trimmedId
+          );
+          return [created, ...filtered];
+        });
+        setSelectedDungeonId(trimmedId);
+        dungeonId = trimmedId;
+      } catch (error: unknown) {
+        appendLog(
+          `Fel vid automatisk dungeon-skapning: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+        return;
+      }
     }
 
     try {
       await withLoading("session", async () => {
-        const next = await postDungeonSession(
-          normalizedPlayerId,
-          selectedDungeonId.trim()
-        );
+        const next = await postDungeonSession(normalizedPlayerId, dungeonId);
         if (!next) {
           appendLog("Session POST returnerade inget innehåll.");
           return;
@@ -189,6 +247,8 @@ export function useDungeonActions({
     normalizedPlayerId,
     requestSync,
     selectedDungeonId,
+    setDungeons,
+    setSelectedDungeonId,
     withLoading,
   ]);
 
