@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { Player } from "../types/player";
-import { fetchAllPlayers } from "../components/functions/Players";
+import { fetchAllPlayers } from "../api/players";
 
 type PlayersContextValue = {
   players: Player[];

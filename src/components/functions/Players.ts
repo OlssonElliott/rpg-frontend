@@ -1,14 +1,8 @@
 import type { Player } from "../../types/player";
+import { buildApiUrl } from "../../utils/api";
 
-const playersListUrl = new URL(
-  "players/getAllPlayers",
-  import.meta.env.VITE_API_URL
-).toString();
-
-const createPlayerUrl = new URL(
-  "players/createPlayer",
-  import.meta.env.VITE_API_URL
-).toString();
+const playersListUrl = buildApiUrl("players/getAllPlayers");
+const createPlayerUrl = buildApiUrl("players/createPlayer");
 
 export async function fetchAllPlayers(): Promise<Player[]> {
   try {

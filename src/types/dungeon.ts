@@ -3,6 +3,7 @@ export type GameSession = {
   dungeonId?: string;
   currentRoomId?: string;
   currentCombatId?: string;
+  lastMoveResult?: MoveResult;
 };
 
 export type DungeonSummary = {
@@ -19,7 +20,9 @@ export type DungeonRoomNode = {
   y?: number;
   doorDirections?: string[];
   connectedRoomIds?: string[];
+  fromDirection?: string;
   start?: boolean;
+  bossRoom?: boolean;
   cleared?: boolean;
 };
 
@@ -44,4 +47,13 @@ export type RoomTemplate = {
   name?: string;
   description?: string;
   enemies?: RoomEnemySummary[];
+};
+
+export type MoveResult = {
+  allowed: boolean;
+  requestedDir: "N" | "E" | "S" | "W";
+  fromRoomId: string;
+  toRoomId: string;
+  reason?: string | null;
+  timestamp: string;
 };
