@@ -73,7 +73,6 @@ export default function Dungeon() {
   useEffect(() => { selectedDungeonIdRef.current = selectedDungeonId; }, [selectedDungeonId]);
   const inCombat = Boolean(session?.currentCombatId);
 
-  // Init – bara ladda listan & välj default
   useEffect(() => {
     if (!playerId) {
       setDungeons([]); setSelectedDungeonId(""); setSession(null); setDetail(null);

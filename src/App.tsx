@@ -4,11 +4,25 @@ import CreateCharacter from "./components/CreateCharacter";
 import { PlayersProvider } from "./context/PlayersContext";
 import SelectCharacter from "./components/SelectCharacter";
 import Dungeon from "./game/Dungeon";
+import BuyArmorButton from "./components/BuyArmorButton";
+import CheckoutSuccess from "./components/CheckoutSuccess";
 
 // import CombatTester from "./components/CombatTester";
 // import DungeonTester from "./components/DungeonTester";
 
 function App(): JSX.Element {
+  const path =
+    typeof window === "undefined" ? "/" : window.location.pathname;
+  const normalizedPath =
+    path === "/" ? path : path.replace(/\/+$/, "");
+
+  if (
+    normalizedPath === "/checkout-success" ||
+    normalizedPath === "/checkout/success"
+  ) {
+    return <CheckoutSuccess />;
+  }
+
   return (
     <PlayersProvider>
       <div className="app-shell">
@@ -17,6 +31,7 @@ function App(): JSX.Element {
             <CreateCharacter />
             <SelectCharacter />
           </div>
+          <BuyArmorButton />
           <div className="app-secondary-column">
             <Dungeon />
           </div>

@@ -4,8 +4,7 @@ import { usePlayersContext } from "../context/PlayersContext";
 import { createPlayer } from "./functions/Players";
 
 export default function CreateCharacter(): JSX.Element {
-  const { players, upsertPlayer, isLoading, refreshPlayers } =
-    usePlayersContext();
+  const { upsertPlayer, refreshPlayers } = usePlayersContext();
   const [newPlayerName, setNewPlayerName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
 
@@ -51,16 +50,6 @@ export default function CreateCharacter(): JSX.Element {
       >
         {isCreating ? "Skapar..." : "Skapa karaktär"}
       </button>
-      {isLoading ? (
-        <p>Laddar befintliga karaktärer...</p>
-      ) : (
-        <ul>
-          {players.map((player) => (
-            <li key={player.id ?? player.name}>{player.name}</li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
-
