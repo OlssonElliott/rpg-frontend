@@ -11,3 +11,14 @@ export async function fetchAllPlayers(): Promise<Player[]> {
 export async function createPlayer(name: string): Promise<Player> {
   return postJson<Player>(createPlayerUrl, { name });
 }
+
+export async function getPlayerById(id: string): Promise<Player | null> {
+  const u = new URL("players/getPlayerById", API_BASE);
+  u.searchParams.set("id", id);
+  const res = await fetch(u.toString(), {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as Player;
+}

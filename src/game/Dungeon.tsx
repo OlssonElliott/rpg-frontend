@@ -1,147 +1,108 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { usePlayersContext, getPlayerKey } from "../context/PlayersContext";
-import {
-  listDungeons,
-  startSession,
-  getSession,
-  getDetail,
-  move as doMove,
-} from "../api/apiDungeon";
-import type {
-  DungeonDetail,
-  DungeonRoomNode,
-  GameSession,
-} from "../types/dungeon";
-
-// -------- Helpers --------
+import { usePlayersContext } from "../context/PlayersContext";
+import { listDungeons, startSession, getDetail, move as doMove } from "../api/apiDungeon";
+import type { DungeonDetail, DungeonRoomNode, GameSession } from "../types/dungeon";
+import CombatView from "./CombatView";
 
 type DungeonDirection = "N" | "E" | "S" | "W";
-
-function isDirection(d: string): d is DungeonDirection {
-  return d === "N" || d === "E" || d === "S" || d === "W";
-}
+type CombatOutcome = "ENEMIES_DEFEATED" | "PLAYER_DEAD" | "DELETED" | null;
 
 function normalize(v: unknown): string {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
 }
 
-function describeRoom(room: DungeonRoomNode | null): string {
-  if (!room) return "Okänt rum";
-  if (room.start) return "Start-rum";
-  if (room.bossRoom) return "Boss-rum";
-  return room.roomRefId || room.roomId || "Okänt rum";
+function deriveDirectionsFromGraph(
+  room: DungeonRoomNode | null | undefined,
+  all: DungeonRoomNode[] | null | undefined
+): DungeonDirection[] {
+  if (!room || !all?.length) return [];
+  const dirs = new Set<DungeonDirection>();
+  const connected = ("connectedRoomIds" in room ? (room as { connectedRoomIds?: string[] }).connectedRoomIds : undefined) ?? [];
+  for (const id of connected) {
+    const nb = all.find((r) => ("roomId" in r ? (r as { roomId?: string }).roomId : undefined) === id);
+    if (!nb) continue;
+    const rx = ("x" in room ? (room as { x?: number }).x : 0) ?? 0;
+    const ry = ("y" in room ? (room as { y?: number }).y : 0) ?? 0;
+    const nx = ("x" in nb ? (nb as { x?: number }).x : 0) ?? 0;
+    const ny = ("y" in nb ? (nb as { y?: number }).y : 0) ?? 0;
+    const dx = Math.sign(nx - rx);
+    const dy = Math.sign(ny - ry);
+    if (dy > 0) dirs.add("N");
+    if (dy < 0) dirs.add("S");
+    if (dx > 0) dirs.add("E");
+    if (dx < 0) dirs.add("W");
+  }
+  return Array.from(dirs);
 }
 
-// -------- Component --------
+function coerceDungeonList(raw: unknown): Array<{ id: string; name?: string }> {
+  const arr = Array.isArray(raw) ? raw : [];
+  return arr
+    .map((d): { id: string; name?: string } => {
+      const obj: Record<string, unknown> = d && typeof d === "object" ? (d as Record<string, unknown>) : {};
+      const idKeys = ["id", "_id", "dungeonId", "refId", "key"] as const;
+      let id = "";
+      for (const k of idKeys) {
+        const v = obj[k];
+        if (typeof v === "string" && v.trim()) { id = v.trim(); break; }
+        if (typeof v === "number") { id = String(v); break; }
+      }
+      const nameKeys = ["name", "title", "displayName"] as const;
+      let name: string | undefined;
+      for (const k of nameKeys) {
+        const v = obj[k];
+        if (typeof v === "string" && v.trim()) { name = v; break; }
+      }
+      return { id, name };
+    })
+    .filter((x) => x.id.length > 0);
+}
 
 export default function Dungeon() {
   const { selectedPlayer } = usePlayersContext();
-  const playerId = normalize(
-    selectedPlayer ? getPlayerKey(selectedPlayer) : ""
-  );
+  const playerId = selectedPlayer?.id ?? "";
 
-  const [dungeons, setDungeons] = useState<{ id?: string; name?: string }[]>(
-    []
-  );
+  const [dungeons, setDungeons] = useState<Array<{ id: string; name?: string }>>([]);
   const [selectedDungeonId, setSelectedDungeonId] = useState("");
-  const [session, setSession] = useState<GameSession | null>(null);
+  const selectedDungeonIdRef = useRef("");
   const [detail, setDetail] = useState<DungeonDetail | null>(null);
+  const [session, setSession] = useState<GameSession | null>(null);
   const [loading, setLoading] = useState(false);
-  const [log, setLog] = useState<string[]>(["Dungeon redo."]);
+  const [log, setLog] = useState<string[]>([]);
+
+  useEffect(() => { selectedDungeonIdRef.current = selectedDungeonId; }, [selectedDungeonId]);
   const inCombat = Boolean(session?.currentCombatId);
 
-  const prevRoomRef = useRef<string | null>(null);
-  useEffect(() => {
-    prevRoomRef.current = session?.currentRoomId ?? null;
-  }, [session?.currentRoomId]);
-
-  const selectedDungeonIdRef = useRef("");
-  useEffect(() => {
-    selectedDungeonIdRef.current = selectedDungeonId;
-  }, [selectedDungeonId]);
-
-  const currentRoom = useMemo(() => {
-    const rooms = detail?.rooms ?? [];
-    if (!rooms.length) return null;
-
-    const sessionRoomId = normalize(session?.currentRoomId ?? "");
-    if (sessionRoomId) {
-      const hit = rooms.find((r) => normalize(r.roomId) === sessionRoomId);
-      if (hit) return hit;
-    }
-    return rooms.find((r) => r.start) ?? rooms[0] ?? null;
-  }, [detail?.rooms, session?.currentRoomId]);
-
-  const currentRoomLabel = describeRoom(currentRoom);
-  const availableDirections = (currentRoom?.doorDirections ?? []).filter(
-    isDirection
-  );
-
-  // -------- lifecycle --------
-
+  // Init – bara ladda listan & välj default
   useEffect(() => {
     if (!playerId) {
-      setDungeons([]);
-      setSelectedDungeonId("");
-      setSession(null);
-      setDetail(null);
-      setLog(["Dungeon redo."]);
-      return;
+      setDungeons([]); setSelectedDungeonId(""); setSession(null); setDetail(null);
+      setLog(["Dungeon redo."]); return;
     }
-
     (async () => {
-      setLoading(true);
       try {
-        const list = await listDungeons();
-        setDungeons(list);
-
-        const cur = normalize(selectedDungeonIdRef.current);
-        if (list.length && !cur) {
-          setSelectedDungeonId(normalize(list[0].id ?? ""));
-        }
-
-        const s = await getSession(playerId);
-        setSession(s);
-
-        const dungeonId = normalize(
-          s?.dungeonId ?? selectedDungeonIdRef.current
-        );
-        if (dungeonId) {
-          const d = await getDetail(dungeonId);
-          setDetail(d);
-        }
+        const ui = coerceDungeonList(await listDungeons());
+        setDungeons(ui);
+        if (ui.length && !selectedDungeonIdRef.current) setSelectedDungeonId(ui[0].id);
       } catch (e) {
-        setLog((l) => [...l, `Fel vid init: ${String(e)}`]);
-      } finally {
-        setLoading(false);
+        setLog((l) => [...l, `Kunde inte ladda dungeons: ${String(e)}`]);
       }
     })();
   }, [playerId]);
 
-  // -------- actions --------
+  async function onStart() {
+    if (!playerId) { setLog((l) => [...l, "Välj karaktär först."]); return; }
+    const dungeonId = normalize(selectedDungeonId || dungeons[0]?.id || "");
+    if (!dungeonId) { setLog((l) => [...l, "Ingen dungeon vald."]); return; }
 
-  async function onStartOrResume() {
-    if (!playerId) return setLog((l) => [...l, "Välj karaktär först."]);
-
-    let dungeonId = normalize(selectedDungeonId);
     setLoading(true);
     try {
-      if (!dungeonId) {
-        if (!dungeons.length) {
-          setLog((l) => [...l, "Ingen dungeon tillgänglig."]);
-          return;
-        }
-        dungeonId = normalize(dungeons[0].id ?? "");
-        setSelectedDungeonId(dungeonId);
-      }
-
-      const s = await startSession(playerId, dungeonId);
-      setSession(s);
-
+      // Alltid nystart
+      const fresh = await startSession(playerId, dungeonId, true);
+      setSession(fresh);
       const d = await getDetail(dungeonId);
       setDetail(d);
-
-      setLog((l) => [...l, `Start: session uppdaterad (${dungeonId}).`]);
+      setLog((l) => [...l, `Ny run startad: ${dungeonId}`]);
     } catch (e) {
       setLog((l) => [...l, `Fel vid start: ${String(e)}`]);
     } finally {
@@ -149,55 +110,12 @@ export default function Dungeon() {
     }
   }
 
-  async function onMove(dir: DungeonDirection) {
-    if (!playerId)
-      return setLog((l) => [...l, "Välj karaktär innan du flyttar."]);
-    if (inCombat) return setLog((l) => [...l, "Kan inte flytta under strid."]);
-
+  async function move(dir: DungeonDirection) {
+    if (!playerId || !session) return;
     setLoading(true);
     try {
-      const before = prevRoomRef.current ?? session?.currentRoomId ?? null;
-
       const s = await doMove(playerId, dir);
-      console.log("MOVE response session:", s); // <— viktig!
       setSession(s);
-
-      const after = s?.currentRoomId ?? null;
-
-      // uppdatera dungeon-detail för säkerhets skull
-      const dungeonId = normalize(s?.dungeonId ?? selectedDungeonId);
-      if (dungeonId) {
-        const d = await getDetail(dungeonId);
-        setDetail(d);
-      }
-
-      // försök läsa lastMoveResult om det finns
-      const result = (s as any)?.lastMoveResult;
-
-      if (result) {
-        if (result.allowed) {
-          setLog((l) => [
-            ...l,
-            `Flytt OK (${result.requestedDir}) ${result.fromRoomId} → ${result.toRoomId}`,
-            `RoomId: ${before ?? "?"} → ${after ?? "?"}`,
-          ]);
-        } else {
-          setLog((l) => [
-            ...l,
-            `Flytt BLOCKERAD (${result.requestedDir}) – orsak: ${
-              result.reason ?? "okänd"
-            }`,
-            `RoomId oförändrat: ${after ?? "?"}`,
-          ]);
-        }
-      } else {
-        // Fanns inget lastMoveResult i JSON → dumpa hela svaret
-        setLog((l) => [
-          ...l,
-          `Ingen lastMoveResult i svar – dump: ${JSON.stringify(s)}`,
-          `RoomId: ${before ?? "?"} → ${after ?? "?"}`,
-        ]);
-      }
     } catch (e) {
       setLog((l) => [...l, `Fel vid move: ${String(e)}`]);
     } finally {
@@ -205,86 +123,80 @@ export default function Dungeon() {
     }
   }
 
-  // -------- render --------
+  const currentRoom: DungeonRoomNode | null = useMemo(() => {
+    if (!detail || !session?.currentRoomId) return null;
+    return detail.rooms?.find((r) => ("roomId" in r ? (r as { roomId?: string }).roomId : undefined) === session.currentRoomId) ?? null;
+  }, [detail, session]);
+
+  const allowedDirs = useMemo(
+    () => deriveDirectionsFromGraph(currentRoom, detail?.rooms),
+    [currentRoom, detail?.rooms]
+  );
 
   return (
     <section className="panel" style={{ display: "grid", gap: "1rem" }}>
-      <h2>Dungeon (Minimal)</h2>
+      <h2>Dungeon</h2>
+      {!selectedPlayer ? <p>Välj en karaktär för att spela.</p> : <p>Aktivt äventyr: {selectedPlayer.name}</p>}
 
-      {!selectedPlayer ? (
-        <p>Välj en karaktär för att spela.</p>
-      ) : (
-        <p>Aktivt äventyr: {selectedPlayer.name}</p>
-      )}
-
-      <div>
-        <label>Dungeon: </label>
+      <div style={{ display: "flex", gap: ".5rem", alignItems: "center" }}>
         <select
           value={selectedDungeonId}
-          onChange={(e) => setSelectedDungeonId(e.target.value.trim())}
-          disabled={loading}
+          onChange={(e) => setSelectedDungeonId(e.target.value)}
+          disabled={loading || inCombat}
         >
-          <option value="">(välj)</option>
           {dungeons.map((d) => (
-            <option key={d.id ?? "?"} value={d.id ?? ""}>
-              {d.name ?? d.id ?? "Okänd dungeon"}
-            </option>
+            <option key={d.id} value={d.id}>{d.name ?? d.id}</option>
           ))}
         </select>
-        <button
-          onClick={() => void onStartOrResume()}
-          disabled={loading || !playerId}
-        >
-          Starta / återuppta
+
+        <button onClick={onStart} disabled={loading || inCombat}>
+          {session ? "Starta ny" : "Starta"}
         </button>
       </div>
 
-      <div>
-        <h3>Nuvarande rum</h3>
-        {currentRoom && (
-          <p>
-            <small>
-              roomId: {currentRoom.roomId} · doors(raw):{" "}
-              {JSON.stringify(currentRoom.doorDirections ?? [])}
-            </small>
-          </p>
-        )}
-        <p>
-          {currentRoomLabel}
-          {currentRoom && <small> (id: {currentRoom.roomId})</small>}
-        </p>
-        {inCombat && (
-          <p style={{ color: "#f59e0b" }}>
-            I strid (combatId: {session?.currentCombatId}) – rörelse blockeras.
-          </p>
-        )}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(4,110px)",
-            gap: 8,
-          }}
-        >
-          {(["N", "E", "S", "W"] as const).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => void onMove(d)}
-              disabled={loading || inCombat || !availableDirections.includes(d)}
-            >
-              {d}
-            </button>
-          ))}
+      {session && !inCombat && (
+        <div className="p-2 rounded border">
+          <div className="font-semibold mb-1">{currentRoom ? (("roomId" in currentRoom ? (currentRoom as { roomId?: string }).roomId : "Rum")) : "Rum"}</div>
+          <div className="flex gap-2">
+            {(["N","E","S","W"] as const).map((d) => (
+              <button key={d} disabled={loading || !allowedDirs.includes(d)} onClick={() => move(d)}>{d}</button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
+
+      {inCombat && session?.currentCombatId && (
+        <CombatView
+          combatId={session.currentCombatId}
+          onExit={async (outcome?: CombatOutcome) => {
+            try {
+              if (!playerId) return;
+
+              if (outcome === "PLAYER_DEAD") {
+                setSession(null);
+                const dungeonId = normalize(selectedDungeonIdRef.current || selectedDungeonId || "");
+                if (dungeonId) {
+                  const fresh = await startSession(playerId, dungeonId, true);
+                  setSession(fresh);
+                  const d = await getDetail(dungeonId);
+                  setDetail(d);
+                  setLog((l) => [...l, "Du dog – ny run startad."]);
+                }
+                return;
+              }
+
+              setLog((l) => [...l, "Strid avslutad. Klicka 'Starta ny' för nästa run."]);
+              setSession(null);
+            } catch (e) {
+              setLog((l) => [...l, `Fel vid post-combat: ${String(e)}`]);
+            }
+          }}
+        />
+      )}
 
       <div>
         <h3>Logg</h3>
-        <ul>
-          {log.map((m, i) => (
-            <li key={i}>{m}</li>
-          ))}
-        </ul>
+        <ul>{log.map((m, i) => (<li key={i}>{m}</li>))}</ul>
       </div>
     </section>
   );

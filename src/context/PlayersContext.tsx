@@ -1,7 +1,8 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { Player } from "../types/player";
-import { fetchAllPlayers } from "../api/players";
+import { fetchAllPlayers, getPlayerById } from "../api/players";
 
 type PlayersContextValue = {
   players: Player[];
@@ -10,22 +11,19 @@ type PlayersContextValue = {
   selectedPlayer: Player | null;
   selectPlayer: (key: string) => void;
   refreshPlayers: () => Promise<void>;
+  // Hämta om vald spelare 
+  refreshSelectedPlayer: () => Promise<void>;
+  // Lägg till/uppdatera en spelare i listan och välj den 
   upsertPlayer: (player: Player) => void;
 };
 
-const PlayersContext = createContext<PlayersContextValue | undefined>(
-  undefined
-);
+const PlayersContext = createContext<PlayersContextValue | undefined>(undefined);
 
 function playerKey(player: Player): string {
   return player.id ?? player.name;
 }
 
-export function PlayersProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function PlayersProvider({ children }: { children: ReactNode }) {
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -40,18 +38,32 @@ export function PlayersProvider({
       setPlayers(data);
       setSelectedKey((currentKey) => {
         if (currentKey) {
-          const stillExists = data.some(
-            (player) => playerKey(player) === currentKey
-          );
-          if (stillExists) {
-            return currentKey;
-          }
+          const stillExists = data.some((p) => playerKey(p) === currentKey);
+          if (stillExists) return currentKey;
         }
         return data.length > 0 ? playerKey(data[0]) : "";
       });
     } finally {
       setIsLoading(false);
     }
+  }
+
+  //Hämta om just vald spelare och uppdatera listan
+  async function refreshSelectedPlayer(): Promise<void> {
+    const id = selectedPlayer?.id;
+    if (!id) return; // inget att göra om ingen vald eller saknar id
+    const fresh = await getPlayerById(id);
+    if (!fresh) return;
+
+    setPlayers((prev) => {
+      const key = playerKey(fresh);
+      const idx = prev.findIndex((p) => playerKey(p) === key);
+      if (idx === -1) return [...prev, fresh];
+      const copy = prev.slice();
+      copy[idx] = fresh;
+      return copy;
+    });
+    // selectedPlayer härleds från players + selectedKey, så ingen extra setState behövs här
   }
 
   useEffect(() => {
@@ -65,13 +77,9 @@ export function PlayersProvider({
   function upsertPlayer(player: Player) {
     setPlayers((current) => {
       const key = playerKey(player);
-      const existingIndex = current.findIndex(
-        (candidate) => playerKey(candidate) === key
-      );
-      if (existingIndex === -1) {
-        return [...current, player];
-      }
-      const copy = [...current];
+      const existingIndex = current.findIndex((c) => playerKey(c) === key);
+      if (existingIndex === -1) return [...current, player];
+      const copy = current.slice();
       copy[existingIndex] = player;
       return copy;
     });
@@ -85,6 +93,7 @@ export function PlayersProvider({
     selectedPlayer,
     selectPlayer,
     refreshPlayers,
+    refreshSelectedPlayer, 
     upsertPlayer,
   };
 
@@ -96,9 +105,7 @@ export function PlayersProvider({
 export function usePlayersContext(): PlayersContextValue {
   const context = useContext(PlayersContext);
   if (!context) {
-    throw new Error(
-      "usePlayersContext must be used within a PlayersProvider component"
-    );
+    throw new Error("usePlayersContext must be used within a PlayersProvider component");
   }
   return context;
 }
