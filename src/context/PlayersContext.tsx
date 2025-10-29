@@ -63,7 +63,6 @@ export function PlayersProvider({ children }: { children: ReactNode }) {
       copy[idx] = fresh;
       return copy;
     });
-    // selectedPlayer härleds från players + selectedKey, så ingen extra setState behövs här
   }
 
   useEffect(() => {

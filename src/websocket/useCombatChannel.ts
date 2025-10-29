@@ -1,4 +1,3 @@
-// src/ws/useCombatChannel.ts
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Client } from "@stomp/stompjs";
 import type { IMessage } from "@stomp/stompjs";
@@ -11,22 +10,19 @@ export type EnemyStub = {
   name?: string;
   hp?: number;
   maxHp?: number;
-  // okända fält behålls i payloaden, men behövs inte här
 };
 
 export type CombatStub = {
   enemies?: EnemyStub[];
-  enemyStates?: EnemyStub[]; // vissa backends använder detta istället
+  enemyStates?: EnemyStub[]; 
   isFinished?: boolean;
   finished?: boolean;
-  // okända fält kan finnas, men vi bryr oss inte om dem här
   [key: string]: unknown;
 };
 
 export type CombatUpdateMessage = {
   combatId?: string;
   combat?: CombatStub | null;
-  // okända fält får följa med
   [key: string]: unknown;
 };
 
@@ -48,7 +44,6 @@ export function useCombatChannel(combatId: string | null | undefined) {
       // STOMP över SockJS
       webSocketFactory: () => new SockJS(WS_HTTP_URL) as unknown as WebSocket,
       reconnectDelay: 2000,
-      // lämna debug undefined för att slippa “empty block”-varningar
       debug: () => {},
     });
 
@@ -57,22 +52,19 @@ export function useCombatChannel(combatId: string | null | undefined) {
 
       // Prenumerera på combat-topic
       client.subscribe(`/topic/combat/${combatId}`, (msg: IMessage) => {
-        // defensiv JSON-parse → unknown → försiktig typning
         let body: unknown;
         try {
           body = JSON.parse(msg.body);
         } catch {
-          return; // ogiltig JSON, ignorera
+          return; 
         }
 
-        // Vi accepterar object med ev. combat/combatId
         if (typeof body === "object" && body !== null) {
           const payload = body as CombatUpdateMessage;
           setLastMsg(payload);
         }
       });
 
-      // Begär initial sync
       client.publish({
         destination: `/app/combat/${combatId}/sync`,
         body: "",
@@ -93,9 +85,7 @@ export function useCombatChannel(combatId: string | null | undefined) {
     return () => {
       setConnected(false);
       clientRef.current = null;
-      // deactivate stänger snyggt
       client.deactivate().catch(() => {
-        /* ignore close errors */
       });
     };
   }, [combatId, WS_HTTP_URL]);

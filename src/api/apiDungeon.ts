@@ -1,4 +1,3 @@
-// apiDungeon.ts
 import { API_BASE } from "./base";
 import type { GameSession, DungeonDetail } from "../types/dungeon";
 
@@ -21,7 +20,7 @@ export async function getDetail(dungeonId: string): Promise<DungeonDetail> {
   return http(u.toString());
 }
 
-/** Alltid ny session när reset=true. */
+// Alltid ny session när reset=true. 
 export async function startSession(
   playerId: string,
   dungeonId: string,

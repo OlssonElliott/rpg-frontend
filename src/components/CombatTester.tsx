@@ -335,9 +335,6 @@ export default function CombatTester() {
   }, [combatId, wsConnected]);
 
   useEffect(() => {
-    // valfritt: om du vill auto-polla state
-    // const t = setInterval(() => combatId && fetchState(), 1500);
-    // return () => clearInterval(t);
   }, [combatId]);
 
   return (

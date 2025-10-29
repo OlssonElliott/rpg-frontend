@@ -1,4 +1,3 @@
-// En enda källa till din API-bas. Fungerar även om .env saknas.
 const RAW = import.meta.env.VITE_API_URL ?? "http://localhost:8080/api/v1/";
 export const API_BASE = RAW.endsWith("/") ? RAW : RAW + "/";
 
