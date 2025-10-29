@@ -3,7 +3,7 @@ import "./App.css";
 import CreateCharacter from "./components/CreateCharacter";
 import { PlayersProvider } from "./context/PlayersContext";
 import SelectCharacter from "./components/SelectCharacter";
-import { DungeonGame } from "./game";
+import Dungeon from "./game/Dungeon";
 
 // import CombatTester from "./components/CombatTester";
 // import DungeonTester from "./components/DungeonTester";
@@ -18,7 +18,7 @@ function App(): JSX.Element {
             <SelectCharacter />
           </div>
           <div className="app-secondary-column">
-            <DungeonGame />
+            <Dungeon />
           </div>
         </div>
         {/*
