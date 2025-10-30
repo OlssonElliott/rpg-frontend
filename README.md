@@ -1,3 +1,5 @@
+Länk till backend: https://github.com/OlssonElliott/rpg-backend
+
 # Frontend – kom igång
 
 Ett litet roguelike-frontend byggt i React som pratar med ett dungeon/combat-API. Du kan skapa karaktärer, utforska rum, starta strider i realtid och se AI-genererade narrationsrader.
