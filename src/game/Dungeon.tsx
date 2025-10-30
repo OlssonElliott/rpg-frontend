@@ -1,11 +1,41 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlayersContext } from "../context/PlayersContext";
-import { listDungeons, startSession, getDetail, move as doMove } from "../api/apiDungeon";
-import type { DungeonDetail, DungeonRoomNode, GameSession } from "../types/dungeon";
+import {
+  listDungeons,
+  startSession,
+  getDetail,
+  move as doMove,
+} from "../api/apiDungeon";
+import type {
+  DungeonDetail,
+  DungeonRoomNode,
+  GameSession,
+} from "../types/dungeon";
 import CombatView from "./CombatView";
+import type { CombatNarrationEntry } from "../websocket/useCombatChannel";
 
 type DungeonDirection = "N" | "E" | "S" | "W";
 type CombatOutcome = "ENEMIES_DEFEATED" | "PLAYER_DEAD" | "DELETED" | null;
+
+type UiLogEntry = {
+  id: string;
+  kind: "system" | "narration";
+  message: string;
+  detail?: string;
+};
+
+function createLogEntry(
+  kind: UiLogEntry["kind"],
+  message: string,
+  detail?: string
+): UiLogEntry {
+  return {
+    id: `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    kind,
+    message,
+    detail,
+  };
+}
 
 function normalize(v: unknown): string {
   return typeof v === "string" ? v.trim() : v == null ? "" : String(v).trim();
@@ -17,9 +47,15 @@ function deriveDirectionsFromGraph(
 ): DungeonDirection[] {
   if (!room || !all?.length) return [];
   const dirs = new Set<DungeonDirection>();
-  const connected = ("connectedRoomIds" in room ? (room as { connectedRoomIds?: string[] }).connectedRoomIds : undefined) ?? [];
+  const connected =
+    ("connectedRoomIds" in room
+      ? (room as { connectedRoomIds?: string[] }).connectedRoomIds
+      : undefined) ?? [];
   for (const id of connected) {
-    const nb = all.find((r) => ("roomId" in r ? (r as { roomId?: string }).roomId : undefined) === id);
+    const nb = all.find(
+      (r) =>
+        ("roomId" in r ? (r as { roomId?: string }).roomId : undefined) === id
+    );
     if (!nb) continue;
     const rx = ("x" in room ? (room as { x?: number }).x : 0) ?? 0;
     const ry = ("y" in room ? (room as { y?: number }).y : 0) ?? 0;
@@ -39,60 +75,132 @@ function coerceDungeonList(raw: unknown): Array<{ id: string; name?: string }> {
   const arr = Array.isArray(raw) ? raw : [];
   return arr
     .map((d): { id: string; name?: string } => {
-      const obj: Record<string, unknown> = d && typeof d === "object" ? (d as Record<string, unknown>) : {};
+      const obj: Record<string, unknown> =
+        d && typeof d === "object" ? (d as Record<string, unknown>) : {};
       const idKeys = ["id", "_id", "dungeonId", "refId", "key"] as const;
       let id = "";
       for (const k of idKeys) {
         const v = obj[k];
-        if (typeof v === "string" && v.trim()) { id = v.trim(); break; }
-        if (typeof v === "number") { id = String(v); break; }
+        if (typeof v === "string" && v.trim()) {
+          id = v.trim();
+          break;
+        }
+        if (typeof v === "number") {
+          id = String(v);
+          break;
+        }
       }
       const nameKeys = ["name", "title", "displayName"] as const;
       let name: string | undefined;
       for (const k of nameKeys) {
         const v = obj[k];
-        if (typeof v === "string" && v.trim()) { name = v; break; }
+        if (typeof v === "string" && v.trim()) {
+          name = v;
+          break;
+        }
       }
       return { id, name };
     })
     .filter((x) => x.id.length > 0);
 }
 
-export default function Dungeon() {
+export type { UiLogEntry };
+
+type Props = {
+  onLogChange?: (entries: UiLogEntry[]) => void;
+};
+
+export default function Dungeon({ onLogChange }: Props) {
   const { selectedPlayer } = usePlayersContext();
   const playerId = selectedPlayer?.id ?? "";
 
-  const [dungeons, setDungeons] = useState<Array<{ id: string; name?: string }>>([]);
+  const [dungeons, setDungeons] = useState<
+    Array<{ id: string; name?: string }>
+  >([]);
   const [selectedDungeonId, setSelectedDungeonId] = useState("");
   const selectedDungeonIdRef = useRef("");
   const [detail, setDetail] = useState<DungeonDetail | null>(null);
   const [session, setSession] = useState<GameSession | null>(null);
   const [loading, setLoading] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
+  const [log, setLog] = useState<UiLogEntry[]>([]);
 
-  useEffect(() => { selectedDungeonIdRef.current = selectedDungeonId; }, [selectedDungeonId]);
+  // Tar emot nya narrationstext som CombatView plockar upp via websocket
+  const handleNarrationEntry = useCallback((entry: CombatNarrationEntry) => {
+    const attacker =
+      entry.attackerName ?? entry.attackerId ?? "Okänd angripare";
+    const defender = entry.defenderName ?? entry.defenderId ?? "Okänt mål";
+    const damage =
+      typeof entry.damageDealt === "number"
+        ? `${entry.damageDealt} skada`
+        : null;
+    const hpAfter =
+      typeof entry.defenderHpAfter === "number"
+        ? `HP kvar: ${entry.defenderHpAfter}`
+        : null;
+    const detailParts = [
+      `${attacker} -> ${defender}`,
+      damage,
+      hpAfter,
+      entry.killingBlow ? "Dödsstöt" : null,
+    ].filter(Boolean) as string[];
+    const message =
+      typeof entry.narration === "string" && entry.narration.trim().length > 0
+        ? entry.narration
+        : `${attacker} anföll ${defender}.`;
+
+    setLog((l) => [
+      ...l,
+      createLogEntry(
+        "narration",
+        message,
+        detailParts.length ? detailParts.join(", ") : undefined
+      ),
+    ]);
+  }, []);
+
+  useEffect(() => {
+    selectedDungeonIdRef.current = selectedDungeonId;
+  }, [selectedDungeonId]);
+  // Synka loggen upp till App.tsx så root-komponenten kan visa hela feeden
+  useEffect(() => {
+    onLogChange?.(log);
+  }, [log, onLogChange]);
   const inCombat = Boolean(session?.currentCombatId);
 
   useEffect(() => {
     if (!playerId) {
-      setDungeons([]); setSelectedDungeonId(""); setSession(null); setDetail(null);
-      setLog(["Dungeon redo."]); return;
+      setDungeons([]);
+      setSelectedDungeonId("");
+      setSession(null);
+      setDetail(null);
+      setLog([createLogEntry("system", "Dungeon redo.")]);
+      return;
     }
     (async () => {
       try {
         const ui = coerceDungeonList(await listDungeons());
         setDungeons(ui);
-        if (ui.length && !selectedDungeonIdRef.current) setSelectedDungeonId(ui[0].id);
+        if (ui.length && !selectedDungeonIdRef.current)
+          setSelectedDungeonId(ui[0].id);
       } catch (e) {
-        setLog((l) => [...l, `Kunde inte ladda dungeons: ${String(e)}`]);
+        setLog((l) => [
+          ...l,
+          createLogEntry("system", `Kunde inte ladda dungeons: ${String(e)}`),
+        ]);
       }
     })();
   }, [playerId]);
 
   async function onStart() {
-    if (!playerId) { setLog((l) => [...l, "Välj karaktär först."]); return; }
+    if (!playerId) {
+      setLog((l) => [...l, createLogEntry("system", "Välj karaktär först.")]);
+      return;
+    }
     const dungeonId = normalize(selectedDungeonId || dungeons[0]?.id || "");
-    if (!dungeonId) { setLog((l) => [...l, "Ingen dungeon vald."]); return; }
+    if (!dungeonId) {
+      setLog((l) => [...l, createLogEntry("system", "Ingen dungeon vald.")]);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -101,9 +209,15 @@ export default function Dungeon() {
       setSession(fresh);
       const d = await getDetail(dungeonId);
       setDetail(d);
-      setLog((l) => [...l, `Ny run startad: ${dungeonId}`]);
+      setLog((l) => [
+        ...l,
+        createLogEntry("system", `Ny run startad: ${dungeonId}`),
+      ]);
     } catch (e) {
-      setLog((l) => [...l, `Fel vid start: ${String(e)}`]);
+      setLog((l) => [
+        ...l,
+        createLogEntry("system", `Fel vid start: ${String(e)}`),
+      ]);
     } finally {
       setLoading(false);
     }
@@ -113,10 +227,14 @@ export default function Dungeon() {
     if (!playerId || !session) return;
     setLoading(true);
     try {
+      // API-svaret kan innehålla nytt combatId och triggar i så fall CombatView
       const s = await doMove(playerId, dir);
       setSession(s);
     } catch (e) {
-      setLog((l) => [...l, `Fel vid move: ${String(e)}`]);
+      setLog((l) => [
+        ...l,
+        createLogEntry("system", `Fel vid move: ${String(e)}`),
+      ]);
     } finally {
       setLoading(false);
     }
@@ -124,7 +242,13 @@ export default function Dungeon() {
 
   const currentRoom: DungeonRoomNode | null = useMemo(() => {
     if (!detail || !session?.currentRoomId) return null;
-    return detail.rooms?.find((r) => ("roomId" in r ? (r as { roomId?: string }).roomId : undefined) === session.currentRoomId) ?? null;
+    return (
+      detail.rooms?.find(
+        (r) =>
+          ("roomId" in r ? (r as { roomId?: string }).roomId : undefined) ===
+          session.currentRoomId
+      ) ?? null
+    );
   }, [detail, session]);
 
   const allowedDirs = useMemo(
@@ -135,7 +259,11 @@ export default function Dungeon() {
   return (
     <section className="panel" style={{ display: "grid", gap: "1rem" }}>
       <h2>Dungeon</h2>
-      {!selectedPlayer ? <p>Välj en karaktär för att spela.</p> : <p>Aktivt äventyr: {selectedPlayer.name}</p>}
+      {!selectedPlayer ? (
+        <p>Välj en karaktär för att spela.</p>
+      ) : (
+        <p>Aktivt äventyr: {selectedPlayer.name}</p>
+      )}
 
       <div style={{ display: "flex", gap: ".5rem", alignItems: "center" }}>
         <select
@@ -144,7 +272,9 @@ export default function Dungeon() {
           disabled={loading || inCombat}
         >
           {dungeons.map((d) => (
-            <option key={d.id} value={d.id}>{d.name ?? d.id}</option>
+            <option key={d.id} value={d.id}>
+              {d.name ?? d.id}
+            </option>
           ))}
         </select>
 
@@ -155,10 +285,22 @@ export default function Dungeon() {
 
       {session && !inCombat && (
         <div className="p-2 rounded border">
-          <div className="font-semibold mb-1">{currentRoom ? (("roomId" in currentRoom ? (currentRoom as { roomId?: string }).roomId : "Rum")) : "Rum"}</div>
+          <div className="font-semibold mb-1">
+            {currentRoom
+              ? "roomId" in currentRoom
+                ? (currentRoom as { roomId?: string }).roomId
+                : "Rum"
+              : "Rum"}
+          </div>
           <div className="flex gap-2">
-            {(["N","E","S","W"] as const).map((d) => (
-              <button key={d} disabled={loading || !allowedDirs.includes(d)} onClick={() => move(d)}>{d}</button>
+            {(["N", "E", "S", "W"] as const).map((d) => (
+              <button
+                key={d}
+                disabled={loading || !allowedDirs.includes(d)}
+                onClick={() => move(d)}
+              >
+                {d}
+              </button>
             ))}
           </div>
         </div>
@@ -167,36 +309,46 @@ export default function Dungeon() {
       {inCombat && session?.currentCombatId && (
         <CombatView
           combatId={session.currentCombatId}
+          onNarration={handleNarrationEntry}
           onExit={async (outcome?: CombatOutcome) => {
             try {
               if (!playerId) return;
 
               if (outcome === "PLAYER_DEAD") {
                 setSession(null);
-                const dungeonId = normalize(selectedDungeonIdRef.current || selectedDungeonId || "");
+                const dungeonId = normalize(
+                  selectedDungeonIdRef.current || selectedDungeonId || ""
+                );
                 if (dungeonId) {
                   const fresh = await startSession(playerId, dungeonId, true);
                   setSession(fresh);
                   const d = await getDetail(dungeonId);
                   setDetail(d);
-                  setLog((l) => [...l, "Du dog – ny run startad."]);
+                  setLog((l) => [
+                    ...l,
+                    createLogEntry("system", "Du dog - ny run startad."),
+                  ]);
                 }
                 return;
               }
 
-              setLog((l) => [...l, "Strid avslutad. Klicka 'Starta ny' för nästa run."]);
+              setLog((l) => [
+                ...l,
+                createLogEntry(
+                  "system",
+                  "Strid avslutad. Klicka 'Starta ny' för nästa run."
+                ),
+              ]);
               setSession(null);
             } catch (e) {
-              setLog((l) => [...l, `Fel vid post-combat: ${String(e)}`]);
+              setLog((l) => [
+                ...l,
+                createLogEntry("system", `Fel vid post-combat: ${String(e)}`),
+              ]);
             }
           }}
         />
       )}
-
-      <div>
-        <h3>Logg</h3>
-        <ul>{log.map((m, i) => (<li key={i}>{m}</li>))}</ul>
-      </div>
     </section>
   );
 }

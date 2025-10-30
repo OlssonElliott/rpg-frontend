@@ -12,9 +12,22 @@ export type EnemyStub = {
   maxHp?: number;
 };
 
+export type CombatNarrationEntry = {
+  attackerId?: string;
+  attackerName?: string;
+  defenderId?: string;
+  defenderName?: string;
+  damageDealt?: number;
+  defenderHpAfter?: number;
+  killingBlow?: boolean;
+  narration?: string;
+  [key: string]: unknown;
+};
+
 export type CombatStub = {
   enemies?: EnemyStub[];
-  enemyStates?: EnemyStub[]; 
+  enemyStates?: EnemyStub[];
+  narrationLog?: CombatNarrationEntry[];
   isFinished?: boolean;
   finished?: boolean;
   [key: string]: unknown;
@@ -40,6 +53,7 @@ export function useCombatChannel(combatId: string | null | undefined) {
   useEffect(() => {
     if (!combatId) return;
 
+    // Skapa STOMP-klient för aktuell combat
     const client = new Client({
       // STOMP över SockJS
       webSocketFactory: () => new SockJS(WS_HTTP_URL) as unknown as WebSocket,
@@ -85,6 +99,7 @@ export function useCombatChannel(combatId: string | null | undefined) {
     return () => {
       setConnected(false);
       clientRef.current = null;
+      // Avsluta för att undvika kvarhängande sockets mellan combat-id:n
       client.deactivate().catch(() => {
       });
     };
