@@ -12,6 +12,25 @@
   gap: 2.5rem;
 }
 
+.app-primary-layout {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.app-primary-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.app-secondary-column {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .app-header h1 {
   margin: 0;
   font-size: 2.4rem;
@@ -34,6 +53,10 @@
   #root {
     padding: 2rem 1.4rem 3rem;
   }
+
+  .app-primary-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 640px) {
@@ -43,5 +66,10 @@
 
   .tester-grid {
     gap: 1.5rem;
+  }
+
+  .app-primary-column,
+  .app-secondary-column {
+    gap: 1.25rem;
   }
 }
