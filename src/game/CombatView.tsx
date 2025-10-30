@@ -1,10 +1,11 @@
 // src/game/CombatView.tsx
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   useCombatChannel,
   type CombatStub,
   type EnemyStub,
   type CombatUpdateMessage,
+  type CombatNarrationEntry,
 } from "../websocket/useCombatChannel";
 import { usePlayersContext } from "../context/PlayersContext";
 
@@ -13,6 +14,7 @@ export type Outcome = "ENEMIES_DEFEATED" | "PLAYER_DEAD" | "DELETED";
 
 type Props = {
   combatId: string;
+  onNarration?: (entry: CombatNarrationEntry) => void;
   onExit?: (outcome: Outcome) => void;
 };
 
@@ -30,9 +32,27 @@ function deriveEnemies(c: CombatStub | null | undefined): EnemyStub[] {
   return b;
 }
 
+function extractNarrationLog(
+  combat: CombatStub | null | undefined
+): CombatNarrationEntry[] {
+  if (!combat) return [];
+
+  const raw =
+    (combat as Record<string, unknown>)["narrationLog"] ??
+    (combat as Record<string, unknown>)["combatNarration"] ??
+    null;
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .filter((entry): entry is CombatNarrationEntry => {
+      return typeof entry === "object" && entry !== null;
+    })
+    .map((entry) => entry);
+}
+
 // Plockar ut spelarens HP
 function extractPlayerHp(combat: CombatStub): number | null {
-  // 1) combat.player?.hp
   const maybePlayer = (combat as Record<string, unknown>)["player"];
   if (
     typeof maybePlayer === "object" &&
@@ -42,11 +62,9 @@ function extractPlayerHp(combat: CombatStub): number | null {
     return (maybePlayer as Record<string, unknown>)["hp"] as number;
   }
 
-  // 2) combat.playerHp
   const directHp = (combat as Record<string, unknown>)["playerHp"];
   if (typeof directHp === "number") return directHp;
 
-  // 3) combat.players?.[0]?.hp
   const players = (combat as Record<string, unknown>)["players"];
   if (Array.isArray(players) && players.length > 0) {
     const p0 = players[0];
@@ -64,13 +82,18 @@ function extractPlayerHp(combat: CombatStub): number | null {
 
 /* ---------------- Component ---------------- */
 
-export default function CombatView({ combatId, onExit }: Props) {
+export default function CombatView({ combatId, onNarration, onExit }: Props) {
   const { connected, lastMsg, sync, playerAction } = useCombatChannel(combatId);
   const { refreshSelectedPlayer } = usePlayersContext();
+  const narrationSnapshotRef = useRef<CombatNarrationEntry[]>([]);
 
   useEffect(() => {
     void refreshSelectedPlayer();
   }, [lastMsg, refreshSelectedPlayer]);
+
+  useEffect(() => {
+    narrationSnapshotRef.current = [];
+  }, [combatId]);
 
   useEffect(() => {
     if (!lastMsg) return;
@@ -95,6 +118,25 @@ export default function CombatView({ combatId, onExit }: Props) {
 
   const combat: CombatStub | null = (lastMsg?.combat ?? null) || null;
   const enemies: EnemyStub[] = useMemo(() => deriveEnemies(combat), [combat]);
+
+  useEffect(() => {
+    const entries = extractNarrationLog(combat);
+    const previous = narrationSnapshotRef.current;
+
+    if (entries.length === 0) {
+      narrationSnapshotRef.current = [];
+      return;
+    }
+
+    const startIndex = previous.length <= entries.length ? previous.length : 0;
+    const freshEntries = entries.slice(startIndex);
+
+    if (freshEntries.length > 0) {
+      freshEntries.forEach((entry) => onNarration?.(entry));
+    }
+
+    narrationSnapshotRef.current = entries;
+  }, [combat, onNarration]);
 
   return (
     <section className="panel" style={{ display: "grid", gap: 12 }}>
