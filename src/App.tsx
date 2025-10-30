@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom"; // +++
 import "./App.css";
 import CreateCharacter from "./components/CreateCharacter";
 import { PlayersProvider } from "./context/PlayersContext";
@@ -15,8 +16,6 @@ import type { UiLogEntry } from "./game/Dungeon";
 function App(): JSX.Element {
   const [dungeonLog, setDungeonLog] = useState<UiLogEntry[]>([]);
   const logContainerRef = useRef<HTMLDivElement | null>(null);
-  const path = typeof window === "undefined" ? "/" : window.location.pathname;
-  const normalizedPath = path === "/" ? path : path.replace(/\/+$/, "");
 
   // När loggen förändras så visas senaste posten direkt
   useEffect(() => {
@@ -25,14 +24,7 @@ function App(): JSX.Element {
     node.scrollTop = node.scrollHeight;
   }, [dungeonLog]);
 
-  if (
-    normalizedPath === "/checkout-success" ||
-    normalizedPath === "/checkout/success"
-  ) {
-    return <CheckoutSuccess />;
-  }
-
-  return (
+  const mainView = (
     <PlayersProvider>
       <div className="app-shell">
         <div className="app-primary-layout">
@@ -73,9 +65,7 @@ function App(): JSX.Element {
                       <div style={{ display: "grid", gap: 2 }}>
                         <span>{entry.message}</span>
                         {entry.detail ? (
-                          <small style={{ color: "#555" }}>
-                            {entry.detail}
-                          </small>
+                          <small style={{ color: "#555" }}>{entry.detail}</small>
                         ) : null}
                       </div>
                     </li>
@@ -88,21 +78,18 @@ function App(): JSX.Element {
             <Dungeon onLogChange={setDungeonLog} />
           </div>
         </div>
-        {/*
-        <header className="app-header">
-          <h1>RPG Testverktyg</h1>
-          <p>
-            Snabbpaneler for att prova bade dungeon-sessioner och combat-motorn.
-          </p>
-        </header>
-
-        <div className="tester-grid">
-          <DungeonTester />
-          <CombatTester />
-        </div>
-        */}
       </div>
     </PlayersProvider>
+  );
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={mainView} />
+        <Route path="/checkout/success" element={<CheckoutSuccess />} />
+        <Route path="/checkout-success" element={<CheckoutSuccess />} />
+        <Route path="*" element={mainView} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
