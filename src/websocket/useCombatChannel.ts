@@ -48,7 +48,7 @@ export function useCombatChannel(combatId: string | null | undefined) {
 
   // SockJS endpoint (http/https), inte ws://
   const WS_HTTP_URL =
-    import.meta.env.VITE_WS_HTTP_URL ?? "http://localhost:8080/ws";
+    import.meta.env.VITE_WS_HTTP_URL ?? "http://localhost:8080/ws-combat";
 
   useEffect(() => {
     if (!combatId) return;
